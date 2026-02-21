@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Division {
+  ACCOUNTING
+  BIZDEV
+  BOTH
+}
+
+enum ClientStatus {
+  PROSPECT
+  ONBOARDING
+  ACTIVE
+  OFFBOARDING
+  INACTIVE
+}
+
+enum EngagementLevel {
+  COLD
+  WARM
+  ACTIVE
+  AT_RISK
+}
+
+enum Role {
+  PARTNER
+  STAFF
+  READ_ONLY
+}
+
+model Partner {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  name      String
+  email     String   @unique
+  division  Division
+  role      Role     @default(PARTNER)
+  avatar    String?
+  createdAt DateTime @default(now())
+
+  clients          Client[]
+  assignedTasks    Task[]
+  timeEntries      TimeEntry[]
+  expenses         Expense[]
+  filesUploaded    File[]
+  sopsCreated      SOP[]
+  clientActivities ClientActivity[]
+
+  @@map("partners")
+}
+
+model Client {
+  id                      String            @id @default(cuid())
+  name                    String
+  contactName             String
+  email                   String
+  phone                   String?
+  city                    String?
+  division                Division
+  status                  ClientStatus      @default(PROSPECT)
+  servicePackage          String?
+  mrr                     Float?
+  contractStartDate       DateTime?
+  monthlyTransactionVolume Int?
+  bankAccountCount        Int?
+  relationshipManagerId   String
+  engagementLevel         EngagementLevel   @default(WARM)
+  notes                   String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  relationshipManager Partner           @relation(fields: [relationshipManagerId], references: [id])
+  tasks               Task[]
+  timeEntries         TimeEntry[]
+  invoices            Invoice[]
+  files               File[]
+  activities          ClientActivity[]
+
+  @@map("clients")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETE
+  BLOCKED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id                  String        @id @default(cuid())
+  title               String
+  description         String?
+  status              TaskStatus    @default(TODO)
+  priority            TaskPriority  @default(MEDIUM)
+  assignedToId        String
+  clientId            String?
+  dueDate             DateTime?
+  completedAt         DateTime?
+  isRecurring         Boolean       @default(false)
+  recurringFrequency  String?
+  sopReference        String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  assignedTo  Partner      @relation(fields: [assignedToId], references: [id])
+  client      Client?      @relation(fields: [clientId], references: [id])
+  timeEntries TimeEntry[]
+
+  @@map("tasks")
+}
+
+enum SOPStatus {
+  LIVE
+  DRAFT
+  ARCHIVED
+}
+
+model SOP {
+  id              String     @id @default(cuid())
+  title           String
+  division        Division
+  serviceType     String
+  status          SOPStatus  @default(DRAFT)
+  version         String     @default("1.0")
+  content         String
+  checklist       Json?
+  checklistState  Json?
+  totalSteps      Int        @default(0)
+  completedSteps  Int        @default(0)
+  tags            String[]
+  lastReviewedAt DateTime?
+  createdById    String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  createdBy Partner @relation(fields: [createdById], references: [id])
+
+  @@map("sops")
+}
+
+model TimeEntry {
+  id          String   @id @default(cuid())
+  partnerId   String
+  clientId    String?
+  taskId      String?
+  date        DateTime
+  hours       Float
+  description String?
+  createdAt   DateTime @default(now())
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+  client  Client? @relation(fields: [clientId], references: [id])
+  task    Task?   @relation(fields: [taskId], references: [id])
+
+  @@map("time_entries")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  clientId       String
+  amount         Float
+  status         InvoiceStatus @default(DRAFT)
+  issuedDate     DateTime?
+  dueDate        DateTime?
+  paidDate       DateTime?
+  servicePackage String
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@map("invoices")
+}
+
+enum ExpenseCategory {
+  SOFTWARE
+  MARKETING
+  OFFICE
+  TRAVEL
+  MEALS
+  PROFESSIONAL_SERVICES
+  OTHER
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  partnerId   String
+  amount      Float
+  category    ExpenseCategory
+  description String
+  date        DateTime
+  receipt     String?
+  createdAt   DateTime        @default(now())
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+
+  @@map("expenses")
+}
+
+enum FileCategory {
+  CONTRACT
+  TAX_RETURN
+  FINANCIAL_STATEMENT
+  BANK_STATEMENT
+  INVOICE
+  RECEIPT
+  CORRESPONDENCE
+  OTHER
+}
+
+model File {
+  id           String       @id @default(cuid())
+  clientId     String
+  uploadedById String
+  fileName     String
+  fileUrl      String
+  fileType     String
+  category     FileCategory @default(OTHER)
+  createdAt    DateTime     @default(now())
+
+  client     Client  @relation(fields: [clientId], references: [id])
+  uploadedBy Partner @relation(fields: [uploadedById], references: [id])
+
+  @@map("files")
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  FILE
+}
+
+model ClientActivity {
+  id          String       @id @default(cuid())
+  clientId    String
+  createdById String
+  type        ActivityType @default(NOTE)
+  content     String
+  createdAt   DateTime     @default(now())
+
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy Partner @relation(fields: [createdById], references: [id])
+
+  @@map("client_activities")
+}
