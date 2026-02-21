@@ -1,9 +1,25 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+let _supabase: SupabaseClient | null = null;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase(): SupabaseClient {
+  if (_supabase) return _supabase;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment."
+    );
+  }
+  _supabase = createClient(url, key);
+  return _supabase;
+}
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getSupabase() as any)[prop];
+  },
+});
 
 export async function uploadFile(
   file: File,
@@ -13,7 +29,8 @@ export async function uploadFile(
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
   const filePath = `${folder}/${fileName}`;
 
-  const { data, error } = await supabase.storage
+  const client = getSupabase();
+  const { data, error } = await client.storage
     .from("magnolia-files")
     .upload(filePath, file);
 
@@ -21,7 +38,7 @@ export async function uploadFile(
     return { url: null, error: error.message };
   }
 
-  const { data: urlData } = supabase.storage
+  const { data: urlData } = client.storage
     .from("magnolia-files")
     .getPublicUrl(filePath);
 
@@ -33,7 +50,7 @@ export async function deleteFile(fileUrl: string): Promise<{ success: boolean; e
     const url = new URL(fileUrl);
     const filePath = url.pathname.split("/magnolia-files/")[1];
 
-    const { error } = await supabase.storage
+    const { error } = await getSupabase().storage
       .from("magnolia-files")
       .remove([filePath]);
 
